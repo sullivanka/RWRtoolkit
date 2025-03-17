@@ -4,7 +4,7 @@ library(RWRtoolkit)
 parse_arguments <- function() {
   suppressPackageStartupMessages(library(optparse))
   option_list <- list(
-    make_option(
+    make_option( # nolint
       c("-f", "--flist"),
       action = "store",
       default = NULL,
@@ -13,7 +13,7 @@ parse_arguments <- function() {
             to file> <short name of network> <group>.  'groups' are either 1,
             2, or 3.  All 1's will form one multiplex network (e.g.
             gene-to-gene), All 2's will form a separate multiplex network (e.g.
-            disease-to-disease), And all 3's will be used to join the 1's and 2's
+            disease-to-disease), And all 3's will be used to join the 1's and 2's # nolint: line_length_linter.
             together (e.g. gene-to-disease) You don't have to have both 1's and
             2's.  But if you do have 1's and 2's, you SHOULD have at least one
             3 to join them up."
@@ -25,10 +25,25 @@ parse_arguments <- function() {
       type = "numeric",
       help = "The parameter delta sets the probability to change between
             layers at the next step. If delta = 0, the particle will always
-            remain in the same layer after a non-restart iteration.  If delta = 1,
+            remain in the same layer after a non-restart iteration.  If delta = 1, # nolint: line_length_linter.
             the particle will always change between layers, therefore not following
             the specific edges of each layer. Default is 0.5.  Note delta must
             be greater than 0 and less than or equal to 1."
+    ),
+    make_option(
+      c("-l", "--lambda"),
+      action = "store",
+      default = NULL,
+      type = "numeric",
+      help = "The parameter lambda sets the probability to explore the bipartite
+            connections in a heterogeneous multiplex. If lambda = 0, the particle # nolint # nolint: line_length_linter.
+            will never explore the bipartite associations and will remain in the
+            multiplex network (e.g. gene-to-gene multiplex). If lambda = 1,
+            the particle will dominate exploring the bipartite associations, and
+            will not explore the homogeneous layers (e.g. gene-to-gene connections
+            or disease-disease connections). Default is NULL as it only pertains
+            to heterogeneous multiplex networks. Lamdba must be greater than 0 
+            and less than or equal to 1; for most users lambda should be set to 0.5."
     ),
     make_option(
       c("-t", "--test"),
@@ -60,7 +75,7 @@ parse_arguments <- function() {
 opt <- parse_arguments()
 
 if (is.null(opt$flist)) {
-  stop("Error. \n - Input file \"flist\" parameter not included.\n", file = stderr())
+  stop("Error. \n - Input file \"flist\" parameter not included.\n", file = stderr()) # nolint
 }
 
 if (opt$verbose) {
@@ -71,10 +86,19 @@ if (opt$verbose) {
 
 print("Running RWR Make Multiplex with options: ")
 print(opt)
-
-RWRtoolkit::RWR_make_multiplex(
+if (is.null(opt$lambda)) {
+  RWRtoolkit::RWR_make_multiplex(
     flist = opt$flist,
     delta = opt$delta,
     output = opt$out,
     verbose = opt$verbose
   )
+} else {
+  RWRtoolkit::RWR_make_het_multiplex(
+    flist = opt$flist,
+    delta = opt$delta,
+    lambda = opt$lambda,
+    output = opt$out,
+    verbose = opt$verbose
+  )
+}

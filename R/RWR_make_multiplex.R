@@ -150,7 +150,7 @@ read_flist <- function(flist) {
 }
 
 ########################################################################
-# Main Function
+# Main Functions
 ########################################################################
 
 #' RWR Make Multiplex
@@ -220,7 +220,8 @@ read_flist <- function(flist) {
 #' system("rm example.flist")
 #'
 #' @export
-RWR_make_multiplex <- function(flist = "", delta = 0.5, output = "network.Rdata",  verbose = FALSE) {
+RWR_make_multiplex <- function(flist = "", delta = 0.5, lambda = NULL,
+                               output = "network.Rdata",  verbose = FALSE) {
   if (flist == "") {
     stop("Please provide a path to your flist, or pass test=TRUE to view an example")
   }
@@ -234,18 +235,110 @@ RWR_make_multiplex <- function(flist = "", delta = 0.5, output = "network.Rdata"
   # Call appropriate network creation function based on groups
   if (length(nw.groups) == 1 && all(nw.groups[[1]]$nwgroup == 1)) {
     make_homogenous_network(nw.groups, delta, output, verbose)
+  } else {
+    # TODO: Add example of flist for homogenous and heterogeneous networks
+    stop("Error: Please ensure your fList file is properly formatted", call = F)
+  }
+
+  return(0)
+}
+
+#' RWR Make Het Multiplex
+#'
+#' `RWR_make_het_multiplex` creates a multiplex network.
+#'
+#' @param flist  Table describing network files to use.  File columns:
+#'               {<}path to file{>} {<}short name of network{>}.  {<}group{>}.
+#'               'groups' are either 1, 2, or 3.  All 1's will form one
+#'               multiplex network (e.g. gene-to-gene), All 2's will form a
+#'               separate multiplex network (e.g. disease-to-disease), And all
+#'               3's will be used to join the 1's and 2's together (e.g.
+#'               gene-to-disease) You don't have to have both 1's and 2's.
+#'               But if you do have 1's and 2's, you SHOULD have at least one
+#'               3 to join them up.  Can be delimited by comma, tab, space,
+#'               pipe, or semicolon.
+#' @param delta  Probability to change between homogeneous layers at the next
+#'               step \[0,1\]. If delta = 0, the particle will always remain in
+#'              the
+#'               same layer after a non-restart iteration.
+#'               If delta = 1, the particle will always change between layers,
+#'               therefore not following the specific edges of each layer.
+#'               Default is 0.5.
+#' @param lambda The parameter lambda sets the probability to explore the
+#'               bipartite connections in a heterogeneous multiplex. If
+#'               lambda = 0, the particle will never explore the bipartite
+#'               associations and will remain in the multiplex network
+#'               (e.g. gene-to-gene multiplex). If lambda = 1, the particle will
+#'               dominate exploring the bipartite associations, and will not
+#'               explore the homogeneous layers (e.g. gene-to-gene connections
+#'               or disease-disease connections). Default is NULL as it only
+#'               pertains to heterogeneous multiplex networks. Lamdba must be
+#'               greater than 0 and less than or equal to 1; for most users
+#'               lambda should be set to 0.5.
+#' @param output Output file name (default "network.Rdata")
+#' @param test   Runs an example. Default FALSE
+#' @param verbose Verbose mode. Default FALSE
+#' @return Mutliplex object is saved to a file (.rdata) to load into subsequent
+#'          functions.
+#' @examples
+#' #
+#' # An example of a default RWR Make Het Multiplex with 
+#' # an output "network_het.Rdata"
+#' extdata.dir <- system.file("example_data", package = "RWRtoolkit")
+#' outdir <- "./rwr_make_multiplex"
+#'
+#' layers.path <- paste(extdata.dir, "/layers/", sep = "")
+#' layers <- list.files(layers.path)
+#' layer_with_paths <- paste(layers.path, layers, sep = "")
+#' layer_names <- sub(pattern = "(.*)\\..*$",
+#'                    replacement = "\\1", basename(layers))
+#' groups <- rep(1, length(layer_names))
+#' flistdatatable <- data.table::data.table(layer_with_paths,
+#'                                          layer_names,
+#'                                          groups)
+#'
+#' outfile <- paste(outdir, "/multiplex.Rdata", sep = "")
+#' write.table(flistdatatable,
+#'   row.names = FALSE,
+#'   col.names = FALSE,
+#'   sep = "\t",
+#'   file = "example.flist", quote = FALSE
+#' )
+#'
+#' RWR_make_multiplex(
+#'   flist = "example.flist",
+#'   output = outfile
+#' )
+#'
+#'
+#'
+#' # An example of an RWR Make Multiplex with a non-default delta and
+#' # with a specified output filename.
+#' outfile <- paste(outdir, "/multiplex_d25_l75.Rdata", sep = "")
+#' RWR_make_multiplex(
+#'   flist = "example.flist",
+#'   delta = 0.25,
+#'   output = outfile
+#' )
+#'
+#' system("rm example.flist")
+#' @export
+RWR_make_het_multiplex <- function(flist = "", delta = 0.5, 
+  lambda = 0.5, output = "network.Rdata",  verbose = FALSE) {
+  # Call appropriate network creation function based on groups
+  if (length(nw.groups) == 1 && all(nw.groups[[1]]$nwgroup == 1)) {
+    make_homogenous_network(nw.groups, delta, output, verbose)
   } else if (length(nw.groups) == 3 && nw.groups[[1]]$nwgroup == 1 && nw.groups[[2]]$nwgroup == 2 && nw.groups[[3]]$nwgroup == 3) {
     warning(
       paste("Hetergeneous Multiplexes are capable of being made",
-      " however, the reaminder of the methods in RWRtoolkit have yet",
-      "to be validated with respect to the networks.",
-      "\n\nThis is planned for V2 of RWRtoolkit."))
+            " however, the reaminder of the methods in RWRtoolkit have yet",
+            "to be validated with respect to the networks.",
+            "\n\nThis is planned for V2 of RWRtoolkit."))
     lambda = 0.5
     make_heterogeneous_multiplex(nw.groups, delta, lambda, output, verbose)
   } else {
     # TODO: Add example of flist for homogenous and heterogeneous networks
     stop("Error: Please ensure your fList file is properly formatted", call = F)
   }
-
   return(0)
 }
