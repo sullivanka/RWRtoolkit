@@ -60,6 +60,6 @@ Suggests:
     rmarkdown,
     RColorBrewer
 Remotes:
-    github::dkainer/RandomWalkRestartMH, 
+    github::Jacobson-CompSysBio/RandomWalkRestartMH,
     bioc::RCy3
 VignetteBuilder: knitr
