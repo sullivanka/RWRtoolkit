@@ -109,13 +109,13 @@ make_heterogeneous_multiplex <- function(nw.groups, delta, lambda, out, verbose)
   # Combine layers and bipartite links into mutiplex heterogeneous network
   nw.mph <- create.multiplexHet(Multiplex_object_1 = nw.mpo1, Multiplex_object_2 = nw.mpo2, Nodes_relations = bipartite_links)
   cat("constructing full supra-adjacency matrix...be VERY patient if there are lots of layers\n")
-  nw.adj <- compute.transition.matrix(nw.mph, delta1 = delta, delta2 = delta, lambda = lambda)
+  nw.adjnorm <- compute.transition.matrix(nw.mph, delta1 = delta, delta2 = delta, lambda = lambda)
 
   # Save data to file with presupplied filename or default: network.Rdata
   if (!dir.exists(dirname(out))) {
     dir.create(dirname(out), recursive = TRUE)
   }
-  save(nw.mph, nw.mpo1, nw.mpo2, bipartite_links, nw.adj, file = out)
+  save(nw.mph, nw.adjnorm, file = out)
   message("\nDONE - Heterogeneous Multiplex object saved to RData file for use in further functions.")
   message(paste("File path: ", out))
 }
@@ -323,8 +323,21 @@ RWR_make_multiplex <- function(flist = "", delta = 0.5, lambda = NULL,
 #'
 #' system("rm example.flist")
 #' @export
-RWR_make_het_multiplex <- function(flist = "", delta = 0.5, 
-  lambda = 0.5, output = "network.Rdata",  verbose = FALSE) {
+RWR_make_het_multiplex <- function(flist = "",
+                                   delta = 0.5,
+                                   lambda = 0.5,
+                                   output = "network.Rdata",
+                                   verbose = FALSE) {
+  if (flist == "") {
+    stop("Please provide a path to your flist, or pass test=TRUE to view an example")
+  }
+
+  # Read flist into datatable, fails on file read err
+  inDF <- read_flist(flist)
+
+  # Split dataframe into groups
+  nw.groups <- inDF %>% dplyr::group_split(nwgroup)
+  
   # Call appropriate network creation function based on groups
   if (length(nw.groups) == 1 && all(nw.groups[[1]]$nwgroup == 1)) {
     make_homogenous_network(nw.groups, delta, output, verbose)
@@ -334,7 +347,6 @@ RWR_make_het_multiplex <- function(flist = "", delta = 0.5,
             " however, the reaminder of the methods in RWRtoolkit have yet",
             "to be validated with respect to the networks.",
             "\n\nThis is planned for V2 of RWRtoolkit."))
-    lambda = 0.5
     make_heterogeneous_multiplex(nw.groups, delta, lambda, output, verbose)
   } else {
     # TODO: Add example of flist for homogenous and heterogeneous networks
