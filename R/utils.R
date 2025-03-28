@@ -135,6 +135,76 @@ load_geneset <- function(path, nw.mpo = NULL, verbose = FALSE, select=NULL) {
   return(list("geneset" = geneset, "extras" = extras))
 }
 
+load_geneset_het <- function(path,
+                             nw.mph = NULL,
+                             verbose = FALSE,
+                             select = NULL) {
+  if (is.null(path)) {
+    return(NULL)
+  } else if (!file.exists(path)) {
+    stop("ERROR: geneset file does not exist: ", path)
+  } else {
+    geneset <- data.table::fread(
+                  path,
+                  header =F,
+                  select = select,
+                  colClasses = c("character")
+                )
+    if (ncol(geneset) < 2) {
+      stop("Your geneset file is incorrectly formatted. Please see documentation.") #nolint message
+    }
+    # Check if seed weights are included by user or not.
+    numericV3 <- suppressWarnings(as.numeric(geneset$V3))
+    if (!is.null(geneset$V3) && all(!is.null(numericV3)) && all(!is.na(numericV3))) {
+      geneset <- dplyr::select(geneset, 1:3)
+      geneset$V3 <- as.numeric(geneset$V3)
+      colnames(geneset) <- c("setid", "gene", "weight")
+    } else {
+      # If there is a non-numeric third col, then just give all genes a weight of 1.
+      geneset <- dplyr::select(geneset, 1:2) %>% dplyr::mutate(weight = 1)
+      colnames(geneset) <- c("setid", "gene", "weight")
+    }
+  }
+
+  # Filtering
+  # Remove any duplicate genes
+  geneset_orig <- geneset
+  geneset <- geneset_orig %>% dplyr::distinct(gene, .keep_all = T)
+  ngenes <- nrow(geneset)
+  extras <- NULL
+
+  # TODO: @kylesullivan in @GRINT.R has a duplicates written to file ~ll 416
+  # TODO: Discussion on whether genes ought to be in multiplex (@kylesullivan - GRINT.R line 425)
+
+  # Remove any genes not in multiplex
+  if (!is.null(nw.mph)) {
+    geneset1 <- geneset %>% dplyr::filter(gene %in% nw.mph$Multiplex1$Pool_of_Nodes)
+    geneset2 <- geneset %>% dplyr::filter(gene %in% nw.mph$Multiplex2$Pool_of_Nodes)
+    geneset <- rbind(geneset1, geneset2)
+
+    # Warn user if some genes in the seed geneset are not in the multiplex
+    if (nrow(geneset) < ngenes) {
+      message(sprintf("%s genes from geneset (%s) are present in the heterogeneous multiplex \n", nrow(geneset), path))
+      extras1 <- geneset_orig %>% dplyr::slice(which(!geneset_orig$gene %in% nw.mph$Multiplex1$Pool_of_Nodes))
+      extras2 <- geneset_orig %>% dplyr::slice(which(!geneset_orig$gene %in% nw.mph$Multiplex2$Pool_of_Nodes))
+      extras <- rbind(extras1, extras2)
+      warning(sprintf("WARNING:: %s genes from geneset (%s) were not found in multiplex: %s\n ", nrow(extras), path, list(extras)))
+      warning(sprintf("Please ensure your geneset files are formated: [ setids | genes | weights (if weights exist) ]\n"))
+    } else {
+      message(sprintf("All %s genes in the geneset (%s) are present in the multiplex\n", nrow(geneset), path))
+    }
+  } else {
+    message(sprintf("Geneset %s was not filtered (nw.mpo not passed to load_geneset utility function)\n", path))
+  }
+
+  if (verbose) {
+    message(sprintf("Loaded gene set (%s genes):\n", nrow(geneset)))
+    print(head(geneset))
+  }
+
+  return(list("geneset" = c(geneset1,geneset2), "extras" = extras))
+}
+
 get_or_set_tau <- function(nw.mpo, optTau) {
   # Ensure Tau param is appropriate (must be one value per layer, and must add up to NumLayers).
 
@@ -393,6 +463,31 @@ load_multiplex_data <- function(filepath_or_url) {
   return(list(
     nw.mpo = nw.mpo,
     nw.adj = nw.adj,
+    nw.adjnorm = nw.adjnorm
+  ))
+}
+
+# Load the multiplex network and adjacency matrices
+# (i.e. nw.mph, nw.adjnorm)
+load_multiplex_het_data <- function(filepath_or_url) {
+  if (is.null(filepath_or_url)) {
+    stop("ERROR: Mandatory arguement data is missing.")
+  }
+
+  is_url <- stringr::str_detect(filepath_or_url, pattern = "http")
+
+  if (!is_url && !file.exists(filepath_or_url)) {
+    stop("ERROR: Rdata input file does not exist: ", filepath_or_url)
+  }
+
+  updated_file_path <- if (is_url) url(filepath_or_url) else filepath_or_url
+  # this contains the multiplex network layers and adj matrix
+  load(updated_file_path)
+
+  if (is.null(nw.mph)) stop("ERROR: failed to load multiplex het RData object") # nolint
+
+  return(list(
+    nw.mph = nw.mph,
     nw.adjnorm = nw.adjnorm
   ))
 }
