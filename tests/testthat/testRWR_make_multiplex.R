@@ -22,14 +22,14 @@ nw_groups <- vctrs::list_of(nw_tibble)
 
 # Heterogeneous Network Tibble
 nw_tibble_het1 <- tibble::tibble(
-  "nwfile" = c("../testNetworks/m1.txt"),
-  "nwname" = c("m1"),
-  "nwgroup" = c(1)
+  "nwfile" = c("../testNetworks/m1.txt", "../testNetworks/m2.txt"),
+  "nwname" = c("m1", "m2"),
+  "nwgroup" = c(1, 1)
 )
 nw_tibble_het2 <- tibble::tibble(
-  "nwfile" = c("../testNetworks/n1.txt"),
-  "nwname" = c("n1"),
-  "nwgroup" = c(2)
+  "nwfile" = c("../testNetworks/n1.txt", "../testNetworks/n2.txt"),
+  "nwname" = c("n1", "n2"),
+  "nwgroup" = c(2, 2)
 )
 nw_tibble_het3 <- tibble::tibble(
   "nwfile" = c("../testNetworks/i1.txt"),
@@ -75,6 +75,106 @@ generate_expected_supraadj <- function(delta) {
   return(c(expected_nonnormalized_mat, expected_normalized_mat))
 }
 
+# generates expected matrix for test data from the multiplex of m1, m2,
+# multiplex of n1, n2, and bipartite graph i1
+generate_expected_supraadj_het <- function(delta, lambda) {
+  one_minus_delta <- 1 - delta
+  one_minus_lambda <- 1 - lambda
+
+  w1 <- one_minus_delta
+  
+  A1 <- c(
+    c(0.0,w1,2*w1,0.0,delta,0.0,0.0,0.0),
+    c(w1,0.0,w1,0.0,0.0,delta,0.0,0.0),
+    c(2*w1,w1,0.0,0.0,0.0,0.0,delta,0.0),
+    c(0.0,0.0,0.0,0.0,0.0,0.0,0.0,delta),
+    c(delta,0.0,0.0,0.0,0.0,0.0,w1,w1),
+    c(0.0,delta,0.0,0.0,0.0,0.0,w1,0.0),
+    c(0.0,0.0,delta,0.0,w1,w1,0.0,w1),
+    c(0.0,0.0,0.0,delta,w1,0.0,w1,0.0)
+  )
+  A2 <- c(
+    c(0.0,w1,0.0,0.0,0.0,delta,0.0,0.0,0.0,0.0),
+    c(w1,0.0,w1,0.0,0.0,0.0,delta,0.0,0.0,0.0),
+    c(0.0,w1,0.0,0.0,0.0,0.0,0.0,delta,0.0,0.0),
+    c(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,delta,0.0),
+    c(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,delta),
+    c(delta,0.0,0.0,0.0,0.0,0.0,0.0,0.0,w1,w1),
+    c(0.0,delta,0.0,0.0,0.0,0.0,0.0,w1,w1,0.0),
+    c(0.0,0.0,delta,0.0,0.0,0.0,w1,0.0,w1,w1),
+    c(0.0,0.0,0.0,delta,0.0,w1,w1,w1,0.0,0.0),
+    c(0.0,0.0,0.0,0.0,delta,w1,0.0,w1,0.0,0.0)
+  )
+  BT <- c(
+    c(0,1,0,0,0,0,1,0,0,0),
+    c(1,0,0,1,0,1,0,0,1,0),
+    c(0,0,0,0,0,0,0,0,0,0),
+    c(0,0,0,0,1,0,0,0,0,1),
+    c(0,1,0,0,0,0,1,0,0,0),
+    c(1,0,0,1,0,1,0,0,1,0),
+    c(0,0,0,0,0,0,0,0,0,0),
+    c(0,0,0,0,1,0,0,0,0,1)
+  )
+
+  mp1_names <- c("0_1","1_1","2_1","3_1","0_2","1_2","2_2","3_2")
+  mp2_names <- c("a_1","b_1","c_1","d_1","e_1","a_2","b_2","c_2","d_2","e_2")
+
+  A1_mat <- matrix(A1,
+                   nrow = 8,
+                   ncol = 8,
+                   dimnames = list(mp1_names, mp1_names))
+  A2_mat <- matrix(A2,
+                   nrow = 10,
+                   ncol = 10,
+                   dimnames = list(mp2_names, mp2_names))
+  BT_mat <- matrix(BT,
+                   nrow = 10,
+                   ncol = 8,
+                   dimnames = list(mp2_names, mp1_names))
+  B_mat <- t(BT_mat)
+  
+  A1_rowsum <- rowSums(A1_mat)
+  A2_rowsum <- rowSums(A2_mat)
+  B_rowsum <- rowSums(B_mat)
+  BT_rowsum <- rowSums(BT_mat)
+
+  # scale each matrix and row normalize
+  for (i in 1:8) {
+    if (A1_rowsum[i] != 0) {
+      A1_mat[i, ] <- A1_mat[i, ] * one_minus_lambda / A1_rowsum[i]
+    }
+    if (B_rowsum[i] != 0) {
+      B_mat[i, ] <- B_mat[i, ] * lambda / B_rowsum[i]
+    }
+  }
+  for (i in 1:10) {
+    if (A2_rowsum[i] != 0) {
+      A2_mat[i, ] <- A2_mat[i, ] * one_minus_lambda / A2_rowsum[i]
+    }
+    if (BT_rowsum[i] != 0) {
+      BT_mat[i, ] <- BT_mat[i, ] * lambda / BT_rowsum[i]
+    }
+  }
+
+  # combine matricex together
+  M1 <- cbind(A1_mat, B_mat)
+  M2 <- cbind(BT_mat, A2_mat)
+  M <- rbind(M1, M2)
+
+  # row normalize M (this account for all zeros in a row of A1, A2, B, or BT)
+  M_rowsum <- rowSums(M)
+  for (i in 1:18) {
+    if (M_rowsum[i] != 0) {
+      M[i, ] <- M[i, ] / M_rowsum[i]
+    }
+  }
+
+  # Transpose matrix and return
+  M <- t(M)
+  expected_normalized_mat <- as(M, "dgCMatrix")
+  return(expected_normalized_mat)
+}
+
 run_test_for_diff_graph_data <- function(
   nw_groups,
   delta,
@@ -96,6 +196,27 @@ run_test_for_diff_graph_data <- function(
   expect_equal(nw.adjnorm, expected_normalized_mat)   #nolint loaded from file
   expect_equal(nw.adj, expected_nonnormalized_mat)  #nolint loaded from file
 }
+
+run_test_for_diff_graph_data_het <- function(
+  nw_groups,
+  delta,
+  lambda,
+  output_filename,
+  verbose) {
+  expected_normalized_mat <- generate_expected_supraadj_het(delta, lambda)
+
+  invisible(
+    make_heterogeneous_multiplex(
+      nw_groups,
+      delta,
+      lambda,
+      output_filename,
+      verbose)
+  )
+  load(output_filename)
+
+  expect_equal(nw.adjnorm, expected_normalized_mat)   #nolint loaded from file
+  }
 
 describe("make_multiplex", {
   it("throws an error when fed an flist tibble with non-existant files", {
@@ -166,7 +287,6 @@ describe("make_homogenous_network", {
 
     expect_true(output_filename %in% list.files())
   })
-
 
   it("ensures multiplex save file matches expected data", {
     delta <- 0.5
@@ -293,6 +413,7 @@ describe("make_homogenous_network", {
       verbose
     )
   })
+
   it("creates multiplexes with mixed header data", {
     nw_tibble <- tibble::tibble(
       "nwfile" = c(
@@ -315,6 +436,7 @@ describe("make_homogenous_network", {
       verbose
     )
   })
+
   it("creates multiplexes with mixed header and mixed delimiter data", {
     nw_tibble <- tibble::tibble(
       "nwfile" = c(
@@ -375,21 +497,29 @@ describe("make_heterogeneous_multiplex", {
     ## When given a 0.5, if there existss only one interlayer edge
     ## That edge recieves the weight of lambda. The remainder of the
     ## weights that are not lambda are then calculated 1-lambda
-    nw_group_input <- list_of(nw_tibble_het1, nw_tibble_het2, nw_tibble_het3)
-    delta <- 1
-
-    ## currently, with package formation, delta appears to do nothing?
-
-    lambda <- 0.6
+    nw_group_input <- vctrs::list_of(nw_tibble_het1, nw_tibble_het2, nw_tibble_het3)
+    delta <- 0.5
+    lambda <- 0.5
     out <- "network.Rdata"
 
     invisible(
-      make_heterogeneous_multiplex(
-        nw_group_input,
-        delta,
-        lambda,
-        out)
-      )
+      make_heterogeneous_multiplex(nw_group_input,
+                                   delta,
+                                   lambda,
+                                   out)
+    )
+
+    expect_true(out %in% list.files())
+  })
+
+  it("ensures multiplex save file matches expected data", {
+    nw_group_input <- vctrs::list_of(nw_tibble_het1, nw_tibble_het2, nw_tibble_het3)
+    delta <- 0.6
+    lambda <- 0.7
+    output_filename <- "testthatOutputH1.txt"
+    verbose <- FALSE
+
+    run_test_for_diff_graph_data_het(nw_group_input, delta, lambda, output_filename, verbose)
   })
 })
 
@@ -515,58 +645,9 @@ describe("RWR_make_multiplex.R:", {
     expect_called(make_heterogenous_stub, 0)
   })
 
-  it("fails to create a heterogeneous network due to there not being enough files", { #nolint 
-    flist_file_path <- "../testFlists/testFlist_heterogeneous_badGrouping.txt"
-
-    make_homogenous_stub <- mock()
-    make_heterogenous_stub <- mock()
-    stub(
-      RWRtoolkit::RWR_make_multiplex,
-      "make_homogenous_network",
-      make_homogenous_stub
-    )
-    stub(
-      RWRtoolkit::RWR_make_multiplex,
-      "make_heterogeneous_multiplex",
-      make_heterogenous_stub
-    )
-
-    expect_error(RWRtoolkit::RWR_make_multiplex(flist_file_path))
-    expect_called(make_homogenous_stub, 0)
-    expect_called(make_heterogenous_stub, 0)
-  })
-
-  it("takes flist and makes a heterogeneous multiplex with default parameters", { #notlint
-    ## Heterogeneous networks
-    nw_group_input <- list_of(nw_tibble_het1, nw_tibble_het2, nw_tibble_het3)
+  it("throws an error if flist contains more than 1 group", {
     flist_file_path <- "../testFlists/testFlist_heterogeneous.txt"
-
-    make_homogenous_stub <- mock()
-    make_heterogenous_stub <- mock()
-    stub(
-      RWRtoolkit::RWR_make_multiplex,
-      "make_homogenous_network",
-      make_homogenous_stub
-    )
-    stub(
-      RWRtoolkit::RWR_make_multiplex,
-      "make_heterogeneous_multiplex",
-      make_heterogenous_stub
-    )
-
-    expect_warning(RWRtoolkit::RWR_make_multiplex(flist_file_path))
-
-    expect_called(make_homogenous_stub, 0)
-    expect_called(make_heterogenous_stub, 1)
-    expect_args(
-      make_heterogenous_stub,
-      1,
-      nw_group_input,
-      0.5,
-      0.5,
-      "network.Rdata",
-      FALSE
-    )
+    expect_error(RWRtoolkit::RWR_make_multiplex(bad_flist))
   })
 })
 
@@ -579,6 +660,7 @@ teardown(
     system("rm testthatOutputP5.txt")
     system("rm testthatOutputP7.txt")
     system("rm testthatOutput1P0.txt")
+    system("rm testthatOutputH1.txt")
     system("rm testthatOutputP5_fromTabDelmited.txt")
     system("rm testthatOutputP5_fromNoHeader.txt")
     system("rm testthatOutputP5_fromMixedDelim.txt")
