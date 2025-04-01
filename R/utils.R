@@ -442,7 +442,7 @@ vplayout <- function(x, y) {
 # End.
 
 # Load the multiplex network and adjacency matrices
-# (i.e. nw.mpo, nw.adj, nw.adjnorm)
+# (i.e. nw.mpo, nw.adjnorm)
 load_multiplex_data <- function(filepath_or_url) {
   if (is.null(filepath_or_url)) {
     stop("ERROR: Mandatory arguement data is missing.")
@@ -462,7 +462,6 @@ load_multiplex_data <- function(filepath_or_url) {
 
   return(list(
     nw.mpo = nw.mpo,
-    nw.adj = nw.adj,
     nw.adjnorm = nw.adjnorm
   ))
 }

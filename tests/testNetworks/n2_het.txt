@@ -1,3 +1,6 @@
 node1 node2 weights
 a b 1
-b c 1
+a c 1
+a e 1
+b d 1
+c e 1

@@ -22,12 +22,12 @@ nw_groups <- vctrs::list_of(nw_tibble)
 
 # Heterogeneous Network Tibble
 nw_tibble_het1 <- tibble::tibble(
-  "nwfile" = c("../testNetworks/m1.txt", "../testNetworks/m2.txt"),
+  "nwfile" = c("../testNetworks/m1_unwt.txt", "../testNetworks/m2.txt"),
   "nwname" = c("m1", "m2"),
   "nwgroup" = c(1, 1)
 )
 nw_tibble_het2 <- tibble::tibble(
-  "nwfile" = c("../testNetworks/n1.txt", "../testNetworks/n2.txt"),
+  "nwfile" = c("../testNetworks/n1_het.txt", "../testNetworks/n2_het.txt"),
   "nwname" = c("n1", "n2"),
   "nwgroup" = c(2, 2)
 )
@@ -38,8 +38,8 @@ nw_tibble_het3 <- tibble::tibble(
 )
 
 
-# generates expected matrix for test data from graphs m1 and m2
-generate_expected_supraadj <- function(delta) {
+# generates expected transition matrix for test data from graphs m1 and m2
+generate_expected_tran_mat_homo <- function(delta) {
   one_minus_delta <- 1 - delta
   # Because of how RandomWalkRestartMH Calculates the edge weights
   # our graph, m1, originally has weights 1 and 2. Those get normalized
@@ -48,153 +48,232 @@ generate_expected_supraadj <- function(delta) {
   w1half <- 0.5 * one_minus_delta
 
   colnames <- c("0_1", "1_1", "2_1", "3_1", "0_2", "1_2", "2_2", "3_2")
-  list_mat <- c(
-    c(0, w1half, w1, 0, delta, 0, 0, 0),
-    c(w1half, 0, w1half, 0, 0, delta, 0, 0),
-    c(w1, w1half, 0, 0, 0, 0, delta, 0),
-    c(0, 0, 0, 0, 0, 0, 0, delta),
-    c(delta, 0, 0, 0, 0, 0, w1, w1),
-    c(0, delta, 0, 0, 0, 0, w1, 0),
-    c(0, 0, delta, 0, w1, w1, 0, w1),
-    c(0, 0, 0, delta, w1, 0, w1, 0)
-  )
-  mat <- matrix(list_mat,
-                nrow = 8,
-                ncol = 8,
-                dimnames = list(colnames, colnames))
+  col_names1 <- c("0_1", "1_1", "2_1", "3_1")
+  col_names2 <- c("0_2", "1_2", "2_2", "3_2")
 
-  # Normalize the matrix by column
-  normalized_mat <- mat %*% diag(1 / colSums(mat))
-  # non normalized matrix retains the original delta as the intra-layer weight
-  expected_nonnormalized_mat <- as(mat, "dgCMatrix")
-  # non matrix are normalized along with the [0,1]
-  #   normalized edge weights in each layer.
-  expected_normalized_mat <- as(normalized_mat, "dgCMatrix")
+  A1 <- matrix(c(0,w1half,w1,0,
+                 w1half,0,w1half,0,
+                 w1,w1half,0,0,
+                 0,0,0,0),
+               nrow = 4, ncol = 4, byrow = TRUE)
+  A2 <- matrix(c(0,0,w1,w1,
+                 0,0,w1,0,
+                 w1,w1,0,w1,
+                 w1,0,w1,0),
+               nrow = 4, ncol = 4)
+  eye <- matrix(c(delta,0,0,0,
+                  0,delta,0,0,
+                  0,0,delta,0,
+                  0,0,0,delta),
+               nrow = 4, ncol = 4)
+
+  colnames(A1) <- col_names1
+  rownames(A1) <- col_names1
+
+  colnames(A2) <- col_names2
+  rownames(A2) <- col_names2
+
+  A1 <- as(A1, "dgCMatrix")
+  A2 <- as(A2, "dgCMatrix")
+
+  A1 <- RandomWalkRestartMH::row.normalize.matrix(A1)
+  A2 <- RandomWalkRestartMH::row.normalize.matrix(A2)
+
+  A1 <- as.matrix(A1)
+  A2 <- as.matrix(A2)
+
+  A1 <- (1 - delta) * A1
+  A2 <- (1 - delta) * A2
+
+  eye1 <- eye
+  colnames(eye1) <- col_names1
+  rownames(eye1) <- col_names2
+
+  eye2 <- eye
+  colnames(eye2) <- col_names2
+  rownames(eye2) <- col_names1
+
+  M1 <- cbind(A1, eye1)
+  M2 <- cbind(eye2, A2)
+  expected_normalized_mat <- rbind(M1, M2)
+
   colnames(expected_normalized_mat) <- colnames
+  rownames(expected_normalized_mat) <- colnames
 
-  return(c(expected_nonnormalized_mat, expected_normalized_mat))
+  expected_normalized_mat <- as(expected_normalized_mat, "dgCMatrix")
+
+  expected_normalized_mat <-
+    RandomWalkRestartMH::row.normalize.matrix(expected_normalized_mat)
+
+  expected_normalized_mat <- as.matrix(expected_normalized_mat)
+  expected_normalized_mat <- t(expected_normalized_mat)
+  expected_normalized_mat <- as(expected_normalized_mat, "dgCMatrix")
+
+  return(expected_normalized_mat)
 }
 
 # generates expected matrix for test data from the multiplex of m1, m2,
 # multiplex of n1, n2, and bipartite graph i1
-generate_expected_supraadj_het <- function(delta, lambda) {
-  one_minus_delta <- 1 - delta
-  one_minus_lambda <- 1 - lambda
+generate_expected_tran_mat_het <- function(delta, lambda) {
+  A1_1 <- matrix(c(0, 1, 1, 0,
+                   1, 0, 1, 0,
+                   1, 1, 0, 0,
+                   0, 0, 0, 0),
+                 nrow = 4, ncol = 4, byrow = TRUE)
+  A2_1 <- matrix(c(0, 0, 1, 1,
+                   0, 0, 1, 0,
+                   1, 1, 0, 1,
+                   1, 0, 1, 0),
+                 nrow = 4, ncol = 4, byrow = TRUE)
+  eye1 <- matrix(c(1, 0, 0, 0,
+                   0, 1, 0, 0,
+                   0, 0, 1, 0,
+                   0, 0, 0, 1),
+                 nrow = 4, ncol = 4)
 
-  w1 <- one_minus_delta
-  
-  A1 <- c(
-    c(0.0,w1,2*w1,0.0,delta,0.0,0.0,0.0),
-    c(w1,0.0,w1,0.0,0.0,delta,0.0,0.0),
-    c(2*w1,w1,0.0,0.0,0.0,0.0,delta,0.0),
-    c(0.0,0.0,0.0,0.0,0.0,0.0,0.0,delta),
-    c(delta,0.0,0.0,0.0,0.0,0.0,w1,w1),
-    c(0.0,delta,0.0,0.0,0.0,0.0,w1,0.0),
-    c(0.0,0.0,delta,0.0,w1,w1,0.0,w1),
-    c(0.0,0.0,0.0,delta,w1,0.0,w1,0.0)
-  )
-  A2 <- c(
-    c(0.0,w1,0.0,0.0,0.0,delta,0.0,0.0,0.0,0.0),
-    c(w1,0.0,w1,0.0,0.0,0.0,delta,0.0,0.0,0.0),
-    c(0.0,w1,0.0,0.0,0.0,0.0,0.0,delta,0.0,0.0),
-    c(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,delta,0.0),
-    c(0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,delta),
-    c(delta,0.0,0.0,0.0,0.0,0.0,0.0,0.0,w1,w1),
-    c(0.0,delta,0.0,0.0,0.0,0.0,0.0,w1,w1,0.0),
-    c(0.0,0.0,delta,0.0,0.0,0.0,w1,0.0,w1,w1),
-    c(0.0,0.0,0.0,delta,0.0,w1,w1,w1,0.0,0.0),
-    c(0.0,0.0,0.0,0.0,delta,w1,0.0,w1,0.0,0.0)
-  )
-  BT <- c(
-    c(0,1,0,0,0,0,1,0,0,0),
-    c(1,0,0,1,0,1,0,0,1,0),
-    c(0,0,0,0,0,0,0,0,0,0),
-    c(0,0,0,0,1,0,0,0,0,1),
-    c(0,1,0,0,0,0,1,0,0,0),
-    c(1,0,0,1,0,1,0,0,1,0),
-    c(0,0,0,0,0,0,0,0,0,0),
-    c(0,0,0,0,1,0,0,0,0,1)
-  )
+  A1_2 <- matrix(c(0, 0, 1, 0, 0,
+                   0, 0, 0, 0, 1,
+                   1, 0, 0, 0, 1,
+                   0, 0, 0, 0, 1,
+                   0, 1, 1, 1, 0),
+                nrow = 5, ncol = 5, byrow = TRUE)
+  A2_2 <- matrix(c(0, 1, 1, 0, 1,
+                   1, 0, 0, 1, 0,
+                   1, 0, 0, 0, 1,
+                   0, 1, 0, 0, 0,
+                   1, 0, 1, 0, 0),
+                 nrow = 5, ncol = 5, byrow = TRUE)
+  eye2 <- matrix(c(1, 0, 0, 0, 0,
+                   0, 1, 0, 0, 0,
+                   0, 0, 1, 0, 0,
+                   0, 0, 0, 1, 0,
+                   0, 0, 0, 0, 1),
+                 nrow = 5, ncol = 5, byrow = TRUE)
 
-  mp1_names <- c("0_1","1_1","2_1","3_1","0_2","1_2","2_2","3_2")
+  B <- matrix(c(1, 0, 0, 1, 0,
+                0, 0, 1, 0, 0,
+                0, 0, 0, 0, 1,
+                0, 0, 0, 0, 0),
+              nrow = 4, ncol = 5, byrow = TRUE)
+
+  mp1_names1 <- c("0_1","1_1","2_1","3_1")
+  mp1_names2 <- c("0_2","1_2","2_2","3_2")
+  mp1_names <- c("0_1", "1_1", "2_1", "3_1", "0_2", "1_2", "2_2", "3_2")
+  mp2_names1 <- c("a_1","b_1","c_1","d_1","e_1")
+  mp2_names2 <- c("a_2","b_2","c_2","d_2","e_2")
   mp2_names <- c("a_1","b_1","c_1","d_1","e_1","a_2","b_2","c_2","d_2","e_2")
 
-  A1_mat <- matrix(A1,
-                   nrow = 8,
-                   ncol = 8,
-                   dimnames = list(mp1_names, mp1_names))
-  A2_mat <- matrix(A2,
-                   nrow = 10,
-                   ncol = 10,
-                   dimnames = list(mp2_names, mp2_names))
-  BT_mat <- matrix(BT,
-                   nrow = 10,
-                   ncol = 8,
-                   dimnames = list(mp2_names, mp1_names))
-  B_mat <- t(BT_mat)
-  
-  A1_rowsum <- rowSums(A1_mat)
-  A2_rowsum <- rowSums(A2_mat)
-  B_rowsum <- rowSums(B_mat)
-  BT_rowsum <- rowSums(BT_mat)
+  # label multiplex 1
+  colnames(A1_1) <- mp1_names1
+  rownames(A1_1) <- mp1_names1
 
-  # scale each matrix and row normalize
-  for (i in 1:8) {
-    if (A1_rowsum[i] != 0) {
-      A1_mat[i, ] <- A1_mat[i, ] * one_minus_lambda / A1_rowsum[i]
-    }
-    if (B_rowsum[i] != 0) {
-      B_mat[i, ] <- B_mat[i, ] * lambda / B_rowsum[i]
-    }
-  }
-  for (i in 1:10) {
-    if (A2_rowsum[i] != 0) {
-      A2_mat[i, ] <- A2_mat[i, ] * one_minus_lambda / A2_rowsum[i]
-    }
-    if (BT_rowsum[i] != 0) {
-      BT_mat[i, ] <- BT_mat[i, ] * lambda / BT_rowsum[i]
-    }
-  }
+  colnames(A2_1) <- mp1_names2
+  rownames(A2_1) <- mp1_names2
+
+  eye1_12 <- eye1
+  colnames(eye1_12) <- mp1_names2
+  rownames(eye1_12) <- mp1_names1
+
+  eye1_21 <- eye1
+  colnames(eye1_21) <- mp1_names1
+  rownames(eye1_21) <- mp1_names2
+
+  # label multiplex 2
+  colnames(A1_2) <- mp2_names1
+  rownames(A1_2) <- mp2_names1
+
+  colnames(A2_2) <- mp2_names2
+  rownames(A2_2) <- mp2_names2
+
+  eye2_12 <- eye2
+  colnames(eye2_12) <- mp2_names2
+  rownames(eye2_12) <- mp2_names1
+
+  eye2_21 <- eye2
+  colnames(eye2_21) <- mp2_names1
+  rownames(eye2_21) <- mp2_names2
+
+  supra_B <- cbind(B, B)
+  supra_B <- rbind(supra_B, supra_B)
+  rownames(supra_B) <- mp1_names
+  colnames(supra_B) <- mp2_names
+
+  supra_BT <- t(supra_B)
+
+  # normalize
+  A1_1 <- as(A1_1, "dgCMatrix")
+  A2_1 <- as(A2_1, "dgCMatrix")
+  A1_2 <- as(A1_2, "dgCMatrix")
+  A2_2 <- as(A2_2, "dgCMatrix")
+
+  A1_1 <- RandomWalkRestartMH::row.normalize.matrix(A1_1)
+  A2_1 <- RandomWalkRestartMH::row.normalize.matrix(A2_1)
+  A1_2 <- RandomWalkRestartMH::row.normalize.matrix(A1_2)
+  A2_2 <- RandomWalkRestartMH::row.normalize.matrix(A2_2)
+
+  A1_1 <- (1 - delta) * A1_1
+  A2_1 <- (1 - delta) * A2_1
+  A1_2 <- (1 - delta) * A1_2
+  A2_2 <- (1 - delta) * A2_2
+
+  eye1_12 <- delta * eye1_12
+  eye1_21 <- delta * eye1_21
+  eye2_12 <- delta * eye2_12
+  eye2_21 <- delta * eye2_21
+
+  A1_top <- cbind(A1_1, eye1_12)
+  A1_bot <- cbind(eye1_21, A2_1)
+  A1 <- rbind(A1_top, A1_bot)
+
+  A2_top <- cbind(A1_2, eye2_12)
+  A2_bot <- cbind(eye2_21, A2_2)
+  A2 <- rbind(A2_top, A2_bot)
+
+  A1 <- as(A1, "dgCMatrix")
+  A2 <- as(A2, "dgCMatrix")
+  supra_B <- as(supra_B, "dgCMatrix")
+  supra_BT <- as(supra_BT, "dgCMatrix")
+
+  A1 <- RandomWalkRestartMH::row.normalize.matrix(A1)
+  A2 <- RandomWalkRestartMH::row.normalize.matrix(A2)
+  supra_B <- RandomWalkRestartMH::row.normalize.matrix(supra_B)
+  supra_BT <- RandomWalkRestartMH::row.normalize.matrix(supra_BT)
+
+  A1 <- A1 * (1 - lambda)
+  A2 <- A2 * (1 - lambda)
+  supra_B <- supra_B * lambda
+  supra_BT <- supra_BT * lambda
 
   # combine matricex together
-  M1 <- cbind(A1_mat, B_mat)
-  M2 <- cbind(BT_mat, A2_mat)
+  M1 <- cbind(A1, supra_B)
+  M2 <- cbind(supra_BT, A2)
   M <- rbind(M1, M2)
 
-  # row normalize M (this account for all zeros in a row of A1, A2, B, or BT)
-  M_rowsum <- rowSums(M)
-  for (i in 1:18) {
-    if (M_rowsum[i] != 0) {
-      M[i, ] <- M[i, ] / M_rowsum[i]
-    }
-  }
+  M <- as(M, "dgCMatrix")
+  M <- RandomWalkRestartMH::row.normalize.matrix(M)
+  M <- as.matrix(M)
 
   # Transpose matrix and return
   M <- t(M)
-  expected_normalized_mat <- as(M, "dgCMatrix")
-  return(expected_normalized_mat)
+  expected_tran_mat_het <- as(M, "dgCMatrix")
+  return(expected_tran_mat_het)
 }
 
-run_test_for_diff_graph_data <- function(
-  nw_groups,
-  delta,
-  output_filename,
-  verbose) {
-  supra_adj_mat <- generate_expected_supraadj(delta)
-  expected_nonnormalized_mat <- supra_adj_mat[[1]]
-  expected_normalized_mat <- supra_adj_mat[[2]]
+run_test_for_diff_graph_data <- function(nw_groups,
+                                         delta,
+                                         output_filename,
+                                         verbose) {
+  expected_transition_mat <- generate_expected_tran_mat_homo(delta)
 
   invisible(
-    make_homogenous_network(
-      nw_groups,
-      delta,
-      output_filename,
-      verbose)
-    )
+    make_homogenous_network(nw_groups,
+                            delta,
+                            output_filename,
+                            verbose)
+  )
   load(output_filename)
 
-  expect_equal(nw.adjnorm, expected_normalized_mat)   #nolint loaded from file
-  expect_equal(nw.adj, expected_nonnormalized_mat)  #nolint loaded from file
+  expect_equal(nw.adjnorm, expected_transition_mat)   #nolint loaded from file
 }
 
 run_test_for_diff_graph_data_het <- function(
@@ -203,7 +282,7 @@ run_test_for_diff_graph_data_het <- function(
   lambda,
   output_filename,
   verbose) {
-  expected_normalized_mat <- generate_expected_supraadj_het(delta, lambda)
+  expected_normalized_mat <- generate_expected_tran_mat_het(delta, lambda)
 
   invisible(
     make_heterogeneous_multiplex(
@@ -345,7 +424,6 @@ describe("make_homogenous_network", {
     )
     load(output_filename)
 
-    expect_equal(nw.adj, expected_nonnormalized_mat)
     expect_equal(nw.adjnorm, expected_normalized_mat)
   })
 
@@ -499,7 +577,7 @@ describe("make_heterogeneous_multiplex", {
     ## weights that are not lambda are then calculated 1-lambda
     nw_group_input <- vctrs::list_of(nw_tibble_het1, nw_tibble_het2, nw_tibble_het3)
     delta <- 0.5
-    lambda <- 0.5
+    lambda <- 0.6
     out <- "network.Rdata"
 
     invisible(

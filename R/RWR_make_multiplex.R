@@ -61,16 +61,15 @@ make_homogenous_network <- function(nw.groups, delta, out, verbose) {
   cat("constructing multiplex network from 1 group of layers: ", nw.groups[[1]]$nwname, "\n")
   nw.mpo <- make_multiplex(nw.groups[[1]])
 
-  # Create the adjacency matrix and normalize the data for the network
-  print("constructing the adjacency matrix...be VERY patient if there are lots of layers or layers are big")
-  nw.adj <- RandomWalkRestartMH::compute.adjacency.matrix(nw.mpo, delta = delta)
-  nw.adjnorm <- RandomWalkRestartMH::normalize.multiplex.adjacency(nw.adj)
+  # Create the transition matrix for the network
+  print("constructing the transition matrix...be VERY patient if there are lots of layers or layers are big")
+  nw.adjnorm <- RandomWalkRestartMH::compute.transition.matrix.homogeneous(nw.mpo, delta = delta)
 
   # Save data to file with presupplied filename or default: network.Rdata
   if (!dir.exists(dirname(out))) {
     dir.create(dirname(out), recursive = TRUE)
   }
-  save(nw.mpo, nw.adj, nw.adjnorm, list = c("nw.mpo", "nw.adj", "nw.adjnorm"), file = out)
+  save(nw.mpo, nw.adjnorm, list = c("nw.mpo", "nw.adjnorm"), file = out)
   message("\nDONE - Homogenous Multiplex object saved to RData file for use in further functions.")
   message(paste("File path: ", out))
 }
@@ -107,9 +106,16 @@ make_heterogeneous_multiplex <- function(nw.groups, delta, lambda, out, verbose)
   cat("putting it all together...\n")
 
   # Combine layers and bipartite links into mutiplex heterogeneous network
-  nw.mph <- create.multiplexHet(Multiplex_object_1 = nw.mpo1, Multiplex_object_2 = nw.mpo2, Nodes_relations = bipartite_links)
+  nw.mph <- create.multiplexHet(Multiplex_object_1 = nw.mpo1,
+                                Multiplex_object_2 = nw.mpo2,
+                                Nodes_relations = bipartite_links)
+
   cat("constructing full supra-adjacency matrix...be VERY patient if there are lots of layers\n")
-  nw.adjnorm <- compute.transition.matrix(nw.mph, delta1 = delta, delta2 = delta, lambda = lambda)
+  nw.adjnorm <-
+    RandomWalkRestartMH::compute.transition.matrix.heterogeneous(nw.mph,
+                                                                 delta1 = delta,
+                                                                 delta2 = delta,
+                                                                 lambda = lambda)
 
   # Save data to file with presupplied filename or default: network.Rdata
   if (!dir.exists(dirname(out))) {
