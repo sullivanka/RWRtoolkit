@@ -106,13 +106,13 @@ make_heterogeneous_multiplex <- function(nw.groups, delta, lambda, out, verbose)
   cat("putting it all together...\n")
 
   # Combine layers and bipartite links into mutiplex heterogeneous network
-  nw.mph <- create.multiplexHet(Multiplex_object_1 = nw.mpo1,
+  nw.mpo <- RandomWalkRestartMH::create.multiplexHet(Multiplex_object_1 = nw.mpo1,
                                 Multiplex_object_2 = nw.mpo2,
                                 Nodes_relations = bipartite_links)
 
   cat("constructing full supra-adjacency matrix...be VERY patient if there are lots of layers\n")
   nw.adjnorm <-
-    RandomWalkRestartMH::compute.transition.matrix.heterogeneous(nw.mph,
+    RandomWalkRestartMH::compute.transition.matrix.heterogeneous(nw.mpo,
                                                                  delta1 = delta,
                                                                  delta2 = delta,
                                                                  lambda = lambda)
@@ -121,7 +121,7 @@ make_heterogeneous_multiplex <- function(nw.groups, delta, lambda, out, verbose)
   if (!dir.exists(dirname(out))) {
     dir.create(dirname(out), recursive = TRUE)
   }
-  save(nw.mph, nw.adjnorm, file = out)
+  save(nw.mpo, nw.adjnorm, file = out)
   message("\nDONE - Heterogeneous Multiplex object saved to RData file for use in further functions.")
   message(paste("File path: ", out))
 }
@@ -345,9 +345,13 @@ RWR_make_het_multiplex <- function(flist = "",
   nw.groups <- inDF %>% dplyr::group_split(nwgroup)
   
   # Call appropriate network creation function based on groups
-  if (length(nw.groups) == 1 && all(nw.groups[[1]]$nwgroup == 1)) {
+  if (length(nw.groups) == 1 &&
+        all(nw.groups[[1]]$nwgroup == 1)) {
     make_homogenous_network(nw.groups, delta, output, verbose)
-  } else if (length(nw.groups) == 3 && nw.groups[[1]]$nwgroup == 1 && nw.groups[[2]]$nwgroup == 2 && nw.groups[[3]]$nwgroup == 3) {
+  } else if (length(nw.groups) == 3 &&
+               all(nw.groups[[1]]$nwgroup == 1) &&
+               all(nw.groups[[2]]$nwgroup == 2) &&
+               all(nw.groups[[3]]$nwgroup == 3)) {
     warning(
       paste("Hetergeneous Multiplexes are capable of being made",
             " however, the reaminder of the methods in RWRtoolkit have yet",
@@ -356,7 +360,7 @@ RWR_make_het_multiplex <- function(flist = "",
     make_heterogeneous_multiplex(nw.groups, delta, lambda, output, verbose)
   } else {
     # TODO: Add example of flist for homogenous and heterogeneous networks
-    stop("Error: Please ensure your fList file is properly formatted", call = F)
+    stop("Error: Please ensure your fList file is properly formatted", call = FALSE)
   }
   return(0)
 }
